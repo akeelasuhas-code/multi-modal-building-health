@@ -35,11 +35,10 @@ def age_table(lat, lon, radius):
     return gee.fetch_annual_indices(lat, lon, radius)
 
 
-@st.cache_resource
 def get_conn():
-    conn = db.connect()
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+    # A fresh connection per call: Streamlit runs sessions on different threads and SQLite
+    # connections must not be shared across them. Opening one is cheap.
+    return db.connect()
 
 
 def status_box(text):
