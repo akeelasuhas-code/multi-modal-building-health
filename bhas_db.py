@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS escalation_log (
 
 
 def connect(path: str | None = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(path or DB_PATH)
+    conn = sqlite3.connect(path or DB_PATH, check_same_thread=False, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.executescript(_SCHEMA)
     return conn
