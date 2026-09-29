@@ -1,5 +1,8 @@
-streamlit
-pillow
-numpy
-pandas
-opencv-python-headless
+streamlit>=1.50
+numpy>=1.26
+pandas>=2.0
+scipy>=1.11
+scikit-image>=0.22
+opencv-python-headless>=4.9
+reportlab>=4.0
+earthengine-api>=1.0
