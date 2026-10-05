@@ -45,6 +45,8 @@ class VisionParams:
     blob_contrast: float = 22.0     # gray levels below flattened background for a dark anomaly
     blob_min_area_frac: float = 0.004
     prune_frac: float = 0.012       # spur pruning length as fraction of long side
+    wide_crack_elongation: float = 3.0  # thick dark region with length/width >= this is a wide crack, not a patch
+    shadow_min_width_frac: float = 0.15  # a full-frame dark band at least this wide (x short side) is a shadow
 
 
 @dataclass
@@ -252,7 +254,24 @@ def _extract(resp: _Response, p: VisionParams, scale: float):
             continue
         hh, ww = sl[0].stop - sl[0].start, sl[1].stop - sl[1].start
         if hh >= 0.9 * h or ww >= 0.9 * w:
-            shadow |= lab_d == i
+            comp = lab_d == i
+            mean_width = comp.sum() / max(1.0, float(skeletonize(comp).sum()))
+            if mean_width >= p.shadow_min_width_frac * min(h, w):     # cracks are much thinner than shadow bands
+                shadow |= comp
+
+    # a thick dark region that is also LONG is a wide crack, not a patch: hand it to the crack mask
+    patch &= ~shadow
+    wide_crack = np.zeros_like(patch)
+    lab_p = label(patch, connectivity=2)
+    if lab_p.max():
+        sk_p = skeletonize(patch)
+        a_p = np.bincount(lab_p.ravel(), minlength=lab_p.max() + 1).astype(float)
+        l_p = np.bincount(lab_p[sk_p].ravel(), minlength=lab_p.max() + 1).astype(float)
+        elong = np.where(l_p > 0, l_p * l_p / np.maximum(a_p, 1.0), 0.0)     # length / mean width
+        is_wide = elong >= p.wide_crack_elongation
+        is_wide[0] = False
+        wide_crack = is_wide[lab_p]
+        patch &= ~wide_crack
 
     # 2) crack candidates: hysteresis on the top-hat response, excluding patches and shadows
     t_hi = max(p.contrast_min, resp.th_med + p.k_noise * resp.th_sigma) * scale
@@ -277,10 +296,9 @@ def _extract(resp: _Response, p: VisionParams, scale: float):
         crack = keep[lab]
     if crack.any():
         crack = _half_max_refine(crack, resp.tophat)
+    crack |= wide_crack
 
-    patch &= ~shadow
     return crack, patch, float(shadow.sum() / (h * w))
-
 
 # ----------------------------------------------------------------------------
 # Measurement
