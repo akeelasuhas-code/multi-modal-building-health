@@ -225,14 +225,43 @@ def _half_max_refine(crack: np.ndarray, tophat: np.ndarray) -> np.ndarray:
 
 
 def _extract(resp: _Response, p: VisionParams, scale: float):
-    """Threshold + shape filtering. scale multiplies the contrast thresholds (used for the uncertainty band)."""
+    """Threshold + shape filtering. scale multiplies the contrast thresholds (used for the uncertainty band).
+    Returns (crack_mask, patch_mask, shadow_fraction)."""
     h, w = resp.gray.shape
     long_side = max(h, w)
+
+    # 1) dark patches (possible spalling / damp) FIRST, from the solid darkness map: any dark region that
+    #    contains a disk wider than a plausible crack. Doing this first stops a stain that touches a crack
+    #    from being counted as crack (the top-hat only sees a stain's rim, which looks like a thin line).
+    flat_s = cv2.GaussianBlur(resp.flat, (0, 0), 2.0)
+    dark = flat_s < -(p.blob_contrast * scale)
+    dark = cv2.morphologyEx(dark.astype(np.uint8), cv2.MORPH_OPEN,
+                            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))).astype(bool)
+    r_thick = 0.0225 * long_side
+    core_thick = ndi.distance_transform_edt(dark) > r_thick
+    patch = np.zeros_like(dark)
+    if core_thick.any():
+        patch = (ndi.distance_transform_edt(~core_thick) <= r_thick + 1.5) & dark
+    patch = _remove_small(patch, max(30, int(p.blob_min_area_frac * h * w)))
+
+    # band-like dark regions spanning (almost) the whole image are almost always shadows, not defects
+    lab_d = label(patch, connectivity=2)
+    shadow = np.zeros_like(patch)
+    for i, sl in enumerate(ndi.find_objects(lab_d), start=1):
+        if sl is None:
+            continue
+        hh, ww = sl[0].stop - sl[0].start, sl[1].stop - sl[1].start
+        if hh >= 0.9 * h or ww >= 0.9 * w:
+            shadow |= lab_d == i
+
+    # 2) crack candidates: hysteresis on the top-hat response, excluding patches and shadows
     t_hi = max(p.contrast_min, resp.th_med + p.k_noise * resp.th_sigma) * scale
     t_lo = p.hyst_low_ratio * t_hi
     cand = apply_hysteresis_threshold(resp.tophat, t_lo, t_hi)
+    cand &= ~cv2.dilate((patch | shadow).astype(np.uint8), np.ones((9, 9), np.uint8)).astype(bool)
     cand = _remove_small(cand, max(12, int(0.00004 * h * w)))
 
+    # 3) keep only long, thin components
     skel_all = skeletonize(cand)
     lab = label(cand, connectivity=2)
     n = lab.max()
@@ -246,29 +275,11 @@ def _extract(resp: _Response, p: VisionParams, scale: float):
             if sk_len[i] >= min_len and sk_len[i] > 0 and (sk_len[i] / max(1.0, area[i] / sk_len[i])) >= p.min_elongation:
                 keep[i] = True
         crack = keep[lab]
-
     if crack.any():
         crack = _half_max_refine(crack, resp.tophat)
 
-    # dark anomalies (possible spalling / moisture stains), excluding crack pixels
-    flat_s = cv2.GaussianBlur(resp.flat, (0, 0), 2.0)
-    dark = flat_s < -(p.blob_contrast * scale)
-    dark &= ~cv2.dilate(crack.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
-    dark = cv2.morphologyEx(dark.astype(np.uint8), cv2.MORPH_OPEN,
-                            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))).astype(bool)
-    dark = _remove_small(dark, max(30, int(p.blob_min_area_frac * h * w)))
-
-    # band-like dark regions that span (almost) the whole image are almost always shadows, not defects
-    lab_d = label(dark, connectivity=2)
-    shadow = np.zeros_like(dark)
-    for i, sl in enumerate(ndi.find_objects(lab_d), start=1):
-        if sl is None:
-            continue
-        hh, ww = sl[0].stop - sl[0].start, sl[1].stop - sl[1].start
-        if hh >= 0.9 * h or ww >= 0.9 * w:
-            shadow |= lab_d == i
-    dark &= ~shadow
-    return crack, dark, float(shadow.sum() / (h * w))
+    patch &= ~shadow
+    return crack, patch, float(shadow.sum() / (h * w))
 
 
 # ----------------------------------------------------------------------------
