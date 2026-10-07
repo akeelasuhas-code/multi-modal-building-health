@@ -1,0 +1,47 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "BHAS: Building Health Auditing System"
+type: software
+authors:
+  - given-names: Suhas
+    family-names: Akella
+    email: akeelasuhas@gmail.com
+    affiliation: "Department of CSE (AI&ML), CMR Technical Campus, Hyderabad"
+  - given-names: Umesh Chandra
+    family-names: Darla
+    email: darlaumesh@gmail.com
+    affiliation: "Department of CSE (AI&ML), CMR Technical Campus, Hyderabad"
+  - given-names: Sindhu
+    family-names: Koppula
+    email: sindhukoppula5@gmail.com
+    affiliation: "Department of CSE (AI&ML), CMR Technical Campus, Hyderabad"
+  - given-names: Srinu
+    family-names: V.
+    email: srinu.cse@cmrtc.ac.in
+    affiliation: "Department of CSE (AI&ML), CMR Technical Campus, Hyderabad"
+repository-code: "https://github.com/akeelasuhas-code/multi-modal-building-health"
+license: MIT
+version: "1.0"
+date-released: "2026-10-07"
+keywords:
+  - crack segmentation
+  - building health
+  - Landsat
+  - construction year
+  - remote sensing
+  - Google Earth Engine
+preferred-citation:
+  type: article
+  title: "Multi-Modal Building Health Screening Using Crack Segmentation and Landsat-Derived Construction Year: A Case Study in Hyderabad"
+  authors:
+    - given-names: Suhas
+      family-names: Akella
+    - given-names: Umesh Chandra
+      family-names: Darla
+    - given-names: Sindhu
+      family-names: Koppula
+    - given-names: Srinu
+      family-names: V.
+  journal: "International Research Journal of Modernization in Engineering Technology and Science (IRJMETS)"
+  year: 2026
+  status: submitted
