@@ -59,6 +59,7 @@ class SeverityParams:
     px_area_crit: float = 0.01      # uncalibrated fallback: crack-pixel fraction treated as critical
     weights: tuple = (0.5, 0.25, 0.25)   # crack width, crack density, dark-anomaly area
     sat_mult: float = 2.0           # a component reaches its maximum at sat_mult x its critical value
+    min_area_density_m2: float = 0.25  # density term used only when the photo covers at least this much wall
     sound_max: float = 10.0
     monitor_max: float = 35.0
 
@@ -273,6 +274,7 @@ def _extract(resp: _Response, p: VisionParams, scale: float):
         wide_crack = is_wide[lab_p]
         patch &= ~wide_crack
 
+
     # 2) crack candidates: hysteresis on the top-hat response, excluding patches and shadows
     t_hi = max(p.contrast_min, resp.th_med + p.k_noise * resp.th_sigma) * scale
     t_lo = p.hyst_low_ratio * t_hi
@@ -299,6 +301,7 @@ def _extract(resp: _Response, p: VisionParams, scale: float):
     crack |= wide_crack
 
     return crack, patch, float(shadow.sum() / (h * w))
+
 
 # ----------------------------------------------------------------------------
 # Measurement
@@ -370,19 +373,27 @@ def compute_severity(m: CrackMeasurement, sp: SeverityParams) -> dict:
     (a component is half-way to its maximum AT the critical value and saturates at 2x, so a crack far beyond the
     limit still scores worse than one just over it). Weights are renormalised to the components available."""
     a1, a2, a3 = sp.weights
-    if m.calibrated:
+    if m.calibrated and m.image_area_m2 is not None and m.image_area_m2 < sp.min_area_density_m2:
+        # close-up photo: crack length per m2 is meaningless over such a small area, so density is omitted
+        f = [m.width_mm_p95 / sp.w_crit_mm, m.blob_area_frac / sp.a_crit]
+        w = [a1, a3]
+        keys = ["width", "patch"]
+        basis = f"calibrated (mm); density omitted (imaged area below {sp.min_area_density_m2:g} m2)"
+    elif m.calibrated:
         f = [m.width_mm_p95 / sp.w_crit_mm, m.density_m_per_m2 / sp.rho_crit_m_per_m2, m.blob_area_frac / sp.a_crit]
         w = [a1, a2, a3]
+        keys = ["width", "density", "patch"]
         basis = "calibrated (mm)"
     else:
         f = [m.crack_area_frac / sp.px_area_crit, m.blob_area_frac / sp.a_crit]
         w = [a1 + a2, a3]
+        keys = ["area", "patch"]
         basis = "UNCALIBRATED (pixel-relative; provide a scale for mm-based severity)"
     w = np.array(w) / sum(w)
     f = np.array(f) / sp.sat_mult
     S = 100.0 * float(np.sum(w * np.minimum(1.0, f)))
     return {"S": S, "status": status_from_score(S, sp.sound_max, sp.monitor_max), "basis": basis,
-            "components": [float(min(1.0, x)) for x in f]}
+            "components": [float(min(1.0, x)) for x in f], "keys": keys}
 
 
 # ----------------------------------------------------------------------------
