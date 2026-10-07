@@ -135,18 +135,14 @@ def score_breakdown(res) -> list:
     vr, sp = res["vision"], res["params"]["severity"]
     comps = vr.severity["components"]
     a1, a2, a3 = sp.weights
-    if vr.measurement.calibrated:
-        names = [("Crack width", "how wide the cracks are compared with the safe limit"),
-                 ("Amount of cracking", "total crack length per square metre of wall"),
-                 ("Damaged patches", "dark patches such as spalling or damp, as a share of the photo")]
-        w = np.array([a1, a2, a3])
-    else:
-        names = [("Cracked area", "share of the photo covered by cracks (no scale given)"),
-                 ("Damaged patches", "dark patches such as spalling or damp, as a share of the photo")]
-        w = np.array([a1 + a2, a3])
-    w = w / w.sum()
-    return [{"factor": n, "explain": e, "points": 100.0 * wi * ci, "max_points": 100.0 * wi, "level": ci}
-            for (n, e), wi, ci in zip(names, w, comps)]
+    INFO = {"width": ("Crack width", "how wide the cracks are compared with the safe limit", a1),
+            "density": ("Amount of cracking", "total crack length per square metre of wall", a2),
+            "patch": ("Damaged patches", "dark patches such as spalling or damp, as a share of the photo", a3),
+            "area": ("Cracked area", "share of the photo covered by cracks (no scale given)", a1 + a2)}
+    keys = vr.severity.get("keys") or (["width", "density", "patch"] if vr.measurement.calibrated else ["area", "patch"])
+    w = np.array([INFO[k][2] for k in keys]); w = w / w.sum()
+    return [{"factor": INFO[k][0], "explain": INFO[k][1], "points": 100.0 * wi * ci, "max_points": 100.0 * wi, "level": ci}
+            for k, wi, ci in zip(keys, w, comps)]
 
 
 # ----------------------------------------------------------------------------- PDF building blocks
